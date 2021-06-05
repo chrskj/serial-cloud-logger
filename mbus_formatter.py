@@ -1,30 +1,6 @@
-"""
-Required packages:
-python3
-Microsoft C++ Build Tools (Microsoft Visual C++ 14.0)
-pip install requests pyserial python_jwt sseclient pycryptodome requests-toolbelt AWSIoTPythonSDK
-* Might have to change crypto to Crypto in AppData\Local\Programs\Python\Python39\Lib\site-packages
-"""
-
-from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
-import serial
-import serial.tools.list_ports as list_ports
+import pandas as pd
 import csv
-from datetime import datetime
 import time
-import json
-
-###############################################################################
-# Global variables
-###############################################################################
-
-# Constants for AWS cloud upload
-clientId = "mbus-collector-2"
-host = "a2ap02hejjfikb-ats.iot.eu-west-1.amazonaws.com"
-cloud_port = 8883
-rootCAPath = "root-CA.crt"
-privateKeyPath = "mbus-collector.private.key"
-certificatePath = "mbus-collector.cert.pem"
 
 # Keep dictionary of sensor specific variables
 # Prefixes are determined by VIF in M-Bus package
@@ -41,28 +17,6 @@ sensor_info_dict = {
     "51705516ce9a": ["loc-4", "13", "13", "67", -1, -1], # Simulated flowIQ
 }
 
-###############################################################################
-# Main function
-###############################################################################
-def main():
-    # print_ports()
-    log_port("COM4")
-
-
-###############################################################################
-# Functions
-###############################################################################
-
-
-def print_ports():
-    """
-    Print available data ports
-    """
-    ports = list(list_ports.comports())
-    for p in ports:
-        print(p)
-
-
 def calculate_pressure(VIF, D1, D2):
     """
     Calculate pressure on M-bus format
@@ -74,7 +28,6 @@ def calculate_pressure(VIF, D1, D2):
     dec_value = int(hex_value, 16) * prefix
     return round(dec_value, 2)
 
-
 def calculate_volume(VIF, D1, D2, D3, D4):
     """
     Calculate volume on M-bus format
@@ -85,7 +38,6 @@ def calculate_volume(VIF, D1, D2, D3, D4):
     hex_value = D1 + D2 + D3 + D4
     int_value = int(hex_value, 16) * prefix
     return round(int_value, 3)
-
 
 def calculate_temperature(VIF, D1):
     """
@@ -251,27 +203,6 @@ def format_packet(pac):
 
     return new_pac
 
-
-def init_aws_upload(myAWSIoTMQTTClient):
-    """
-    Initialize AWS uploading
-    """
-    myAWSIoTMQTTClient.configureEndpoint(host, cloud_port)
-    myAWSIoTMQTTClient.configureCredentials(
-        rootCAPath, privateKeyPath, certificatePath
-    )
-
-    # AWSIoTMQTTClient connection configuration
-    myAWSIoTMQTTClient.configureAutoReconnectBackoffTime(1, 32, 20)
-    myAWSIoTMQTTClient.configureOfflinePublishQueueing(-1)  # Set as infinite
-    myAWSIoTMQTTClient.configureDrainingFrequency(2)  # Draining: 2 Hz
-    myAWSIoTMQTTClient.configureConnectDisconnectTimeout(10)  # 10 sec
-    myAWSIoTMQTTClient.configureMQTTOperationTimeout(5)  # 5 sec
-
-    # Connect to AWS IoT
-    myAWSIoTMQTTClient.connect()
-
-
 def print_packet(packet):
     """
     Print a data packet
@@ -281,7 +212,6 @@ def print_packet(packet):
         print(i, end="\t")
     print(" ")
 
-
 def save_packet(save_loc, packet):
     """
     Save a data packet in a csv format
@@ -290,125 +220,32 @@ def save_packet(save_loc, packet):
         writer = csv.writer(f, delimiter=",")
         writer.writerow([packet])
 
+def main():
+    source_location = "../../data/2021/05-mai/"
+    flow_meter = "688268302c2d"
+    pressure_meter = "770004242c2d"
+    date = "2021-05-22"
 
-def log_port(port):
-    """
-    Read serial port and optionally save the data to file and cloud
-    """
-    myAWSIoTMQTTClient = None
-    myAWSIoTMQTTClient = AWSIoTMQTTClient(clientId)
-    init_aws_upload(myAWSIoTMQTTClient)
+    flow_file = source_location + flow_meter + "-" + date + '.csv'
+    pressure_file = source_location + pressure_meter + "-" + date + '.csv'
 
-    ser = serial.Serial(port, 19200)  # open serial port.
-    print(ser.name)
-    ser.reset_input_buffer()  # Discard all content of input buffer
+    formatted_save_loc = source_location + sensor_info_dict[flow_meter][0] + "_" + date + "-formatted.csv"
 
-    while True:
-        try:
-            ###################################################################
-            # Read all packets
-            ###################################################################
-            device_name = ""
-            ser_byte = ser.read()  # Read first byte to determine length
-            in_hex = ser_byte.hex()  # Convert to hex
-            packet = in_hex
-
-            # Read the rest of the bytes
-            for i in range(int(in_hex, 16)):
-                ser_byte = ser.read()
-                in_hex = ser_byte.hex()
-                packet += ";" + in_hex
-
-                if i <= 6 and i > 0:  # Store all bytes for device name
-                    device_name = in_hex + device_name
-
-            # Time and date calculation
-            date_today = datetime.today().strftime("%Y-%m-%d")
-            now = datetime.now()
-            seconds_since_midnight = int(
-                (
-                    now - now.replace(hour=0, minute=0, second=0, microsecond=0)
-                ).total_seconds()
-            )
-
-            timed_packet = str(seconds_since_midnight) + ";" + packet
-            
-            #if timed_packet.split(";")[3] != "2d":
-            #    continue
-
-            ###################################################################
-            # Format data
-            ###################################################################
-            formatted_packet = format_packet(timed_packet)
-            print_packet(device_name + ";" + formatted_packet)
-
-            ###################################################################
-            # Save raw data to file
-            ###################################################################
-            raw_save_loc = device_name + "-" + date_today + ".csv"
-            save_packet(raw_save_loc, timed_packet)
-
-            ###################################################################
-            # Save formatted data to file
-            ###################################################################
-            formatted_save_loc = sensor_info_dict[device_name][0] + "_" + date_today + "-formatted.csv"
+    with open(flow_file) as csv_flow_file:
+        csv_reader = csv.reader(csv_flow_file)
+        for row in csv_reader:
+            #print(row)
+            formatted_packet = format_packet(row[0])
+            print_packet(flow_meter + ";" + formatted_packet)
             save_packet(formatted_save_loc, formatted_packet)
 
-            ###################################################################
-            # Save formatted data to cloud
-            ###################################################################
-            formatted_packet_list = formatted_packet.split(";")
-            timed_packet_list = timed_packet.split(";")
-            sensor_type = "Unknown"
-            data_to_upload = {}
-
-            # Define data to be uploaded
-            if timed_packet_list[10] == "16":
-                sensor_type = "flow"
-                data_to_upload = {
-                    #"Date": date_today + " " + formatted_packet_list[0],
-                    "SerialNumber": device_name,
-                    "CollectorID": clientId,
-                    "Location": sensor_info_dict[device_name][0],
-                    "flow_inst": float(formatted_packet_list[1]),
-                    "flow_max_month": float(formatted_packet_list[2]),
-                    "temp_ambient": int(formatted_packet_list[3]),
-                    "flow_inst_diff": int(formatted_packet_list[4]),
-                    "flow_max_month_diff": int(formatted_packet_list[5]),
-                    "RSSI": int(formatted_packet_list[9]),
-                }
-            elif timed_packet_list[10] == "18":
-                sensor_type = "pressure"
-                data_to_upload = {
-                    #"Date": date_today + " " + formatted_packet_list[0],
-                    "SerialNumber": device_name,
-                    "CollectorID": clientId,
-                    "Location": sensor_info_dict[device_name][0],
-                    "min_pressure": float(formatted_packet_list[6]),
-                    "max_pressure": float(formatted_packet_list[7]),
-                    "inst_pressure": float(formatted_packet_list[8]),
-                    "RSSI": int(formatted_packet_list[9]),
-                }
-
-            # Define topic name
-            topic = "collectors/" + clientId + "/" + sensor_type + "/" + device_name
-            messageJson = json.dumps(data_to_upload)
-            try:
-                myAWSIoTMQTTClient.publish(topic, messageJson, 1)
-                # print('Published topic %s: %s\n' % (topic, messageJson))
-            except Exception as e:
-                print("Error: ", e)
-            ###################################################################
-
-        except Exception as e:
-            error_time = datetime.today().strftime("%Y-%m-%d/%H:%M:%S")
-            print("Error occured at", error_time)
-            with open("error_log.csv", "a", newline="") as f:
-                writer = csv.writer(f, delimiter=",")
-                writer.writerow([error_time])
-                writer.writerow([e])
-            print("Continuing logging...")
-            continue
+    with open(pressure_file) as csv_pressure_file:
+        csv_reader = csv.reader(csv_pressure_file)
+        for row in csv_reader:
+            #print(row)
+            formatted_packet = format_packet(row[0])
+            print_packet(pressure_meter + ";" + formatted_packet)
+            save_packet(formatted_save_loc, formatted_packet)
 
 
 if __name__ == "__main__":
