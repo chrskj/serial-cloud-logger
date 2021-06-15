@@ -38,16 +38,16 @@ base_address = "0x8000"
 base_address_int = int(base_address, 16)
 
 with open(csv_file) as f:
-   csv_reader = csv.reader(f, delimiter=';')
-   line_count = 0
-   el_count = 0
-   for row in csv_reader:
-      for el in row:
-         el = int(el, 16)
-         #print(el)
-         ih[base_address_int + el_count] = el
-         el_count += 1
-      line_count += 1
+    csv_reader = csv.reader(f, delimiter=";")
+    line_count = 0
+    el_count = 0
+    for row in csv_reader:
+        for el in row:
+            el = int(el, 16)
+            # print(el)
+            ih[base_address_int + el_count] = el
+            el_count += 1
+        line_count += 1
 
 print("Elements:", el_count)
 print("lines:", line_count)

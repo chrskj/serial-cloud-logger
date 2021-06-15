@@ -1,11 +1,9 @@
 """
-Required packages:
-python3
-Microsoft C++ Build Tools (Microsoft Visual C++ 14.0)
-pip install requests pyserial python_jwt sseclient pycryptodome requests-toolbelt AWSIoTPythonSDK
-* Might have to change crypto to Crypto in AppData\Local\Programs\Python\Python39\Lib\site-packages
+To install all required libraries:
+$ pip install -r requirements.txt
 """
 
+import click
 from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
 import serial
 import serial.tools.list_ports as list_ports
@@ -13,6 +11,8 @@ import csv
 from datetime import datetime
 import time
 import json
+
+__author__ = "Christofer Gilje Skjaeveland"
 
 ###############################################################################
 # Global variables
@@ -31,22 +31,26 @@ certificatePath = "mbus-collector.cert.pem"
 # [location, last_min_pressure_VIF, last_max_pressure_VIF, last_inst_pressure_VIF
 # [location, last_flow1_VIF, last_flow2_VIF, last_temp_VIF, last_flow1_calc, last_flow2_calc]
 sensor_info_dict = {
-    "770004242c2d": ["loc-1", "69", "69", "69"], # PressureSensor
-    "688268302c2d": ["loc-1", "13", "13", "67", -1, -1], # flowIQ
-    "50902542ce9a": ["loc-2", "69", "69", "69"], # Simulated PressureSensor
-    "51705369ce9a": ["loc-2", "13", "13", "67", -1, -1], # Simulated flowIQ
-    "51705518ce9a": ["loc-3", "69", "69", "69"], # Simulated PressureSensor
-    "51705538ce9a": ["loc-3", "13", "13", "67", -1, -1], # Simulated flowIQ
-    "50902294ce9a": ["loc-4", "69", "69", "69"], # Simulated PressureSensor
-    "51705516ce9a": ["loc-4", "13", "13", "67", -1, -1], # Simulated flowIQ
+    "770004242c2d": ["loc-1", "69", "69", "69"],  # PressureSensor
+    "688268302c2d": ["loc-1", "13", "13", "67", -1, -1],  # flowIQ
+    "50902542ce9a": ["loc-2", "69", "69", "69"],  # Simulated PressureSensor
+    "51705369ce9a": ["loc-2", "13", "13", "67", -1, -1],  # Simulated flowIQ
+    "51705518ce9a": ["loc-3", "69", "69", "69"],  # Simulated PressureSensor
+    "51705538ce9a": ["loc-3", "13", "13", "67", -1, -1],  # Simulated flowIQ
+    "50902294ce9a": ["loc-4", "69", "69", "69"],  # Simulated PressureSensor
+    "51705516ce9a": ["loc-4", "13", "13", "67", -1, -1],  # Simulated flowIQ
 }
+
 
 ###############################################################################
 # Main function
 ###############################################################################
+@click.group()
 def main():
-    # print_ports()
-    log_port("COM4")
+    """
+    Script for logging wM-Bus packets on a port
+    """
+    pass
 
 
 ###############################################################################
@@ -54,13 +58,14 @@ def main():
 ###############################################################################
 
 
+@main.command()
 def print_ports():
     """
     Print available data ports
     """
     ports = list(list_ports.comports())
     for p in ports:
-        print(p)
+        click.echo(p)
 
 
 def calculate_pressure(VIF, D1, D2):
@@ -95,13 +100,21 @@ def calculate_temperature(VIF, D1):
     prefix_bin = bin(int(VIF, 16))[2:].zfill(8)[6:9]
     prefix = 10 ** (int(prefix_bin, 2) - 3)
     hex_value = D1
-    #print("variables are ", str(hex_value), " and ", str(prefix))
+    # print("variables are ", str(hex_value), " and ", str(prefix))
     int_value = int(hex_value, 16) * prefix
-    #print("returning ", str(int_value))
+    # print("returning ", str(int_value))
     return int(int_value)
 
+
 def calculate_pressure_packet(pac_list, i1, i2, i3):
-    device_name = pac_list[8] + pac_list[7] + pac_list[6] + pac_list[5] + pac_list[4] + pac_list[3]
+    device_name = (
+        pac_list[8]
+        + pac_list[7]
+        + pac_list[6]
+        + pac_list[5]
+        + pac_list[4]
+        + pac_list[3]
+    )
 
     # [location, last_min_pressure_VIF, last_max_pressure_VIF, last_inst_pressure_VIF
     global sensor_info_dict
@@ -128,8 +141,16 @@ def calculate_pressure_packet(pac_list, i1, i2, i3):
     pressure_pac += ";" + str(press_inst_calc)
     return pressure_pac
 
+
 def calculate_flow_packet(pac_list, i1, i2, i3):
-    device_name = pac_list[8] + pac_list[7] + pac_list[6] + pac_list[5] + pac_list[4] + pac_list[3]
+    device_name = (
+        pac_list[8]
+        + pac_list[7]
+        + pac_list[6]
+        + pac_list[5]
+        + pac_list[4]
+        + pac_list[3]
+    )
     # [location, last_flow1_VIF, last_flow2_VIF, last_temp_VIF, last_flow1_calc, last_flow2_calc]
     global sensor_info_dict
     last_flow1_VIF = sensor_info_dict[device_name][1]
@@ -158,7 +179,7 @@ def calculate_flow_packet(pac_list, i1, i2, i3):
     flow_pac += ";" + str(volume2_calc)
 
     # temperature
-    #print("lets calculate som temperature with ", str(i3))
+    # print("lets calculate som temperature with ", str(i3))
     temp_calc = calculate_temperature(last_temp_VIF, pac_list[i3])
     flow_pac += ";" + str(temp_calc)
 
@@ -178,6 +199,7 @@ def calculate_flow_packet(pac_list, i1, i2, i3):
     flow_pac += ";;;"
     return flow_pac
 
+
 def format_packet(pac):
     """
     Format packets received on M-bus format into data that is readable
@@ -185,7 +207,14 @@ def format_packet(pac):
     global sensor_info_dict
 
     temp_pac = pac.split(";")
-    device_name = temp_pac[8] + temp_pac[7] + temp_pac[6] + temp_pac[5] + temp_pac[4] + temp_pac[3]
+    device_name = (
+        temp_pac[8]
+        + temp_pac[7]
+        + temp_pac[6]
+        + temp_pac[5]
+        + temp_pac[4]
+        + temp_pac[3]
+    )
 
     new_pac = ""
 
@@ -196,8 +225,10 @@ def format_packet(pac):
     man_id_1 = temp_pac[3]
     man_id_2 = temp_pac[4]
 
-    if man_id_1 == "2d" and man_id_2 == "2c" and packet_type == "16": # Kamstrup flowIQ
-        if temp_pac[20] == "78": # VIF is transmitted
+    if (
+        man_id_1 == "2d" and man_id_2 == "2c" and packet_type == "16"
+    ):  # Kamstrup flowIQ
+        if temp_pac[20] == "78":  # VIF is transmitted
             # last_flow1_VIF
             sensor_info_dict[device_name][1] = temp_pac[27]
             # last_flow2_VIF
@@ -207,14 +238,16 @@ def format_packet(pac):
             i1 = 31
             i2 = 37
             i3 = 40
-        elif temp_pac[20] == "79": # VIF is not transmitted
+        elif temp_pac[20] == "79":  # VIF is not transmitted
             i1 = 30
             i2 = 34
             i3 = 35
         new_pac += calculate_flow_packet(temp_pac, i1, i2, i3)
-    
-    elif man_id_1 == "2d" and man_id_2 == "2c" and packet_type == "18": # Kamstrup PressureSensor
-        if temp_pac[20] == "78": # VIF is transmitted
+
+    elif (
+        man_id_1 == "2d" and man_id_2 == "2c" and packet_type == "18"
+    ):  # Kamstrup PressureSensor
+        if temp_pac[20] == "78":  # VIF is transmitted
             # last_min_pressure_VIF
             sensor_info_dict[device_name][1] = temp_pac[22]
             # last_max_pressure_VIF
@@ -224,19 +257,23 @@ def format_packet(pac):
             i1 = 24
             i2 = 28
             i3 = 32
-        elif temp_pac[20] == "79": # VIF is not transmitted
+        elif temp_pac[20] == "79":  # VIF is not transmitted
             i1 = 26
             i2 = 28
             i3 = 30
         new_pac += calculate_pressure_packet(temp_pac, i1, i2, i3)
 
-    elif man_id_1 == "9a" and man_id_2 == "ce" and packet_type == "16": # Simulated flowIQ
+    elif (
+        man_id_1 == "9a" and man_id_2 == "ce" and packet_type == "16"
+    ):  # Simulated flowIQ
         i1 = 31
         i2 = 35
         i3 = 36
         new_pac += calculate_flow_packet(temp_pac, i1, i2, i3)
 
-    elif man_id_1 == "9a" and man_id_2 == "ce" and packet_type == "18": # Simulated PressureSensor
+    elif (
+        man_id_1 == "9a" and man_id_2 == "ce" and packet_type == "18"
+    ):  # Simulated PressureSensor
         i1 = 27
         i2 = 29
         i3 = 31
@@ -291,10 +328,29 @@ def save_packet(save_loc, packet):
         writer.writerow([packet])
 
 
-def log_port(port):
+@main.command()
+@click.argument("port")
+@click.option("-pr", "--print-raw-packets", type=bool, default=True)
+@click.option("-sr", "--save-raw-packets", type=bool, default=True)
+@click.option("-f", "--format-packets", type=bool, default=False)
+@click.option("-pf", "--print-formatted-packets", type=bool, default=False)
+@click.option("-sf", "--save-formatted-packets", type=bool, default=False)
+@click.option("-u", "--upload-packets", type=bool, default=False)
+def log_port(
+    port,
+    print_raw_packets,
+    save_raw_packets,
+    format_packets,
+    print_formatted_packets,
+    save_formatted_packets,
+    upload_packets,
+):
     """
-    Read serial port and optionally save the data to file and cloud
+    Read serial port and choose between several options
     """
+    if upload_packets or save_formatted_packets or print_formatted_packets:
+        format_packets = True
+
     myAWSIoTMQTTClient = None
     myAWSIoTMQTTClient = AWSIoTMQTTClient(clientId)
     init_aws_upload(myAWSIoTMQTTClient)
@@ -332,72 +388,96 @@ def log_port(port):
             )
 
             timed_packet = str(seconds_since_midnight) + ";" + packet
-            
-            #if timed_packet.split(";")[3] != "2d":
-            #    continue
 
             ###################################################################
-            # Format data
+            # Print raw Packets
             ###################################################################
-            formatted_packet = format_packet(timed_packet)
-            print_packet(device_name + ";" + formatted_packet)
+            if print_raw_packets:
+                print_packet(timed_packet)
 
             ###################################################################
-            # Save raw data to file
+            # Format packets
             ###################################################################
-            raw_save_loc = device_name + "-" + date_today + ".csv"
-            save_packet(raw_save_loc, timed_packet)
+            if format_packets:
+                formatted_packet = format_packet(timed_packet)
 
             ###################################################################
-            # Save formatted data to file
+            # Print formatted packets
             ###################################################################
-            formatted_save_loc = sensor_info_dict[device_name][0] + "_" + date_today + "-formatted.csv"
-            save_packet(formatted_save_loc, formatted_packet)
+            if print_formatted_packets:
+                print_packet(device_name + ";" + formatted_packet)
+
+            ###################################################################
+            # Save raw packets to file
+            ###################################################################
+            if save_raw_packets:
+                raw_save_loc = device_name + "-" + date_today + ".csv"
+                save_packet(raw_save_loc, timed_packet)
+
+            ###################################################################
+            # Save formatted packets to file
+            ###################################################################
+            if save_formatted_packets:
+                formatted_save_loc = (
+                    sensor_info_dict[device_name][0]
+                    + "_"
+                    + date_today
+                    + "-formatted.csv"
+                )
+                save_packet(formatted_save_loc, formatted_packet)
 
             ###################################################################
             # Save formatted data to cloud
             ###################################################################
-            formatted_packet_list = formatted_packet.split(";")
-            timed_packet_list = timed_packet.split(";")
-            sensor_type = "Unknown"
-            data_to_upload = {}
+            if upload_packets:
+                formatted_packet_list = formatted_packet.split(";")
+                timed_packet_list = timed_packet.split(";")
+                sensor_type = "Unknown"
+                data_to_upload = {}
 
-            # Define data to be uploaded
-            if timed_packet_list[10] == "16":
-                sensor_type = "flow"
-                data_to_upload = {
-                    #"Date": date_today + " " + formatted_packet_list[0],
-                    "SerialNumber": device_name,
-                    "CollectorID": clientId,
-                    "Location": sensor_info_dict[device_name][0],
-                    "flow_inst": float(formatted_packet_list[1]),
-                    "flow_max_month": float(formatted_packet_list[2]),
-                    "temp_ambient": int(formatted_packet_list[3]),
-                    "flow_inst_diff": int(formatted_packet_list[4]),
-                    "flow_max_month_diff": int(formatted_packet_list[5]),
-                    "RSSI": int(formatted_packet_list[9]),
-                }
-            elif timed_packet_list[10] == "18":
-                sensor_type = "pressure"
-                data_to_upload = {
-                    #"Date": date_today + " " + formatted_packet_list[0],
-                    "SerialNumber": device_name,
-                    "CollectorID": clientId,
-                    "Location": sensor_info_dict[device_name][0],
-                    "min_pressure": float(formatted_packet_list[6]),
-                    "max_pressure": float(formatted_packet_list[7]),
-                    "inst_pressure": float(formatted_packet_list[8]),
-                    "RSSI": int(formatted_packet_list[9]),
-                }
+                # Define data to be uploaded
+                if timed_packet_list[10] == "16":
+                    sensor_type = "flow"
+                    data_to_upload = {
+                        # "Date": date_today + " " + formatted_packet_list[0],
+                        "SerialNumber": device_name,
+                        "CollectorID": clientId,
+                        "Location": sensor_info_dict[device_name][0],
+                        "flow_inst": float(formatted_packet_list[1]),
+                        "flow_max_month": float(formatted_packet_list[2]),
+                        "temp_ambient": int(formatted_packet_list[3]),
+                        "flow_inst_diff": int(formatted_packet_list[4]),
+                        "flow_max_month_diff": int(formatted_packet_list[5]),
+                        "RSSI": int(formatted_packet_list[9]),
+                    }
+                elif timed_packet_list[10] == "18":
+                    sensor_type = "pressure"
+                    data_to_upload = {
+                        # "Date": date_today + " " + formatted_packet_list[0],
+                        "SerialNumber": device_name,
+                        "CollectorID": clientId,
+                        "Location": sensor_info_dict[device_name][0],
+                        "min_pressure": float(formatted_packet_list[6]),
+                        "max_pressure": float(formatted_packet_list[7]),
+                        "inst_pressure": float(formatted_packet_list[8]),
+                        "RSSI": int(formatted_packet_list[9]),
+                    }
 
-            # Define topic name
-            topic = "collectors/" + clientId + "/" + sensor_type + "/" + device_name
-            messageJson = json.dumps(data_to_upload)
-            try:
-                myAWSIoTMQTTClient.publish(topic, messageJson, 1)
-                # print('Published topic %s: %s\n' % (topic, messageJson))
-            except Exception as e:
-                print("Error: ", e)
+                # Define topic name
+                topic = (
+                    "collectors/"
+                    + clientId
+                    + "/"
+                    + sensor_type
+                    + "/"
+                    + device_name
+                )
+                messageJson = json.dumps(data_to_upload)
+                try:
+                    myAWSIoTMQTTClient.publish(topic, messageJson, 1)
+                    # print('Published topic %s: %s\n' % (topic, messageJson))
+                except Exception as e:
+                    print("Error: ", e)
             ###################################################################
 
         except Exception as e:

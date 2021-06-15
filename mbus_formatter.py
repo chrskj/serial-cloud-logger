@@ -1,4 +1,3 @@
-import pandas as pd
 import csv
 import time
 
@@ -7,15 +6,16 @@ import time
 # [location, last_min_pressure_VIF, last_max_pressure_VIF, last_inst_pressure_VIF
 # [location, last_flow1_VIF, last_flow2_VIF, last_temp_VIF, last_flow1_calc, last_flow2_calc]
 sensor_info_dict = {
-    "770004242c2d": ["loc-1", "69", "69", "69"], # PressureSensor
-    "688268302c2d": ["loc-1", "13", "13", "67", -1, -1], # flowIQ
-    "50902542ce9a": ["loc-2", "69", "69", "69"], # Simulated PressureSensor
-    "51705369ce9a": ["loc-2", "13", "13", "67", -1, -1], # Simulated flowIQ
-    "51705518ce9a": ["loc-3", "69", "69", "69"], # Simulated PressureSensor
-    "51705538ce9a": ["loc-3", "13", "13", "67", -1, -1], # Simulated flowIQ
-    "50902294ce9a": ["loc-4", "69", "69", "69"], # Simulated PressureSensor
-    "51705516ce9a": ["loc-4", "13", "13", "67", -1, -1], # Simulated flowIQ
+    "770004242c2d": ["loc-1", "69", "69", "69"],  # PressureSensor
+    "688268302c2d": ["loc-1", "13", "13", "67", -1, -1],  # flowIQ
+    "50902542ce9a": ["loc-2", "69", "69", "69"],  # Simulated PressureSensor
+    "51705369ce9a": ["loc-2", "13", "13", "67", -1, -1],  # Simulated flowIQ
+    "51705518ce9a": ["loc-3", "69", "69", "69"],  # Simulated PressureSensor
+    "51705538ce9a": ["loc-3", "13", "13", "67", -1, -1],  # Simulated flowIQ
+    "50902294ce9a": ["loc-4", "69", "69", "69"],  # Simulated PressureSensor
+    "51705516ce9a": ["loc-4", "13", "13", "67", -1, -1],  # Simulated flowIQ
 }
+
 
 def calculate_pressure(VIF, D1, D2):
     """
@@ -28,6 +28,7 @@ def calculate_pressure(VIF, D1, D2):
     dec_value = int(hex_value, 16) * prefix
     return round(dec_value, 2)
 
+
 def calculate_volume(VIF, D1, D2, D3, D4):
     """
     Calculate volume on M-bus format
@@ -39,6 +40,7 @@ def calculate_volume(VIF, D1, D2, D3, D4):
     int_value = int(hex_value, 16) * prefix
     return round(int_value, 3)
 
+
 def calculate_temperature(VIF, D1):
     """
     Calculate temperature on M-bus format
@@ -47,13 +49,21 @@ def calculate_temperature(VIF, D1):
     prefix_bin = bin(int(VIF, 16))[2:].zfill(8)[6:9]
     prefix = 10 ** (int(prefix_bin, 2) - 3)
     hex_value = D1
-    #print("variables are ", str(hex_value), " and ", str(prefix))
+    # print("variables are ", str(hex_value), " and ", str(prefix))
     int_value = int(hex_value, 16) * prefix
-    #print("returning ", str(int_value))
+    # print("returning ", str(int_value))
     return int(int_value)
 
+
 def calculate_pressure_packet(pac_list, i1, i2, i3):
-    device_name = pac_list[8] + pac_list[7] + pac_list[6] + pac_list[5] + pac_list[4] + pac_list[3]
+    device_name = (
+        pac_list[8]
+        + pac_list[7]
+        + pac_list[6]
+        + pac_list[5]
+        + pac_list[4]
+        + pac_list[3]
+    )
 
     # [location, last_min_pressure_VIF, last_max_pressure_VIF, last_inst_pressure_VIF
     global sensor_info_dict
@@ -80,8 +90,16 @@ def calculate_pressure_packet(pac_list, i1, i2, i3):
     pressure_pac += ";" + str(press_inst_calc)
     return pressure_pac
 
+
 def calculate_flow_packet(pac_list, i1, i2, i3):
-    device_name = pac_list[8] + pac_list[7] + pac_list[6] + pac_list[5] + pac_list[4] + pac_list[3]
+    device_name = (
+        pac_list[8]
+        + pac_list[7]
+        + pac_list[6]
+        + pac_list[5]
+        + pac_list[4]
+        + pac_list[3]
+    )
     # [location, last_flow1_VIF, last_flow2_VIF, last_temp_VIF, last_flow1_calc, last_flow2_calc]
     global sensor_info_dict
     last_flow1_VIF = sensor_info_dict[device_name][1]
@@ -110,7 +128,7 @@ def calculate_flow_packet(pac_list, i1, i2, i3):
     flow_pac += ";" + str(volume2_calc)
 
     # temperature
-    #print("lets calculate som temperature with ", str(i3))
+    # print("lets calculate som temperature with ", str(i3))
     temp_calc = calculate_temperature(last_temp_VIF, pac_list[i3])
     flow_pac += ";" + str(temp_calc)
 
@@ -130,6 +148,7 @@ def calculate_flow_packet(pac_list, i1, i2, i3):
     flow_pac += ";;;"
     return flow_pac
 
+
 def format_packet(pac):
     """
     Format packets received on M-bus format into data that is readable
@@ -137,7 +156,14 @@ def format_packet(pac):
     global sensor_info_dict
 
     temp_pac = pac.split(";")
-    device_name = temp_pac[8] + temp_pac[7] + temp_pac[6] + temp_pac[5] + temp_pac[4] + temp_pac[3]
+    device_name = (
+        temp_pac[8]
+        + temp_pac[7]
+        + temp_pac[6]
+        + temp_pac[5]
+        + temp_pac[4]
+        + temp_pac[3]
+    )
 
     new_pac = ""
 
@@ -148,8 +174,10 @@ def format_packet(pac):
     man_id_1 = temp_pac[3]
     man_id_2 = temp_pac[4]
 
-    if man_id_1 == "2d" and man_id_2 == "2c" and packet_type == "16": # Kamstrup flowIQ
-        if temp_pac[20] == "78": # VIF is transmitted
+    if (
+        man_id_1 == "2d" and man_id_2 == "2c" and packet_type == "16"
+    ):  # Kamstrup flowIQ
+        if temp_pac[20] == "78":  # VIF is transmitted
             # last_flow1_VIF
             sensor_info_dict[device_name][1] = temp_pac[27]
             # last_flow2_VIF
@@ -159,14 +187,16 @@ def format_packet(pac):
             i1 = 31
             i2 = 37
             i3 = 40
-        elif temp_pac[20] == "79": # VIF is not transmitted
+        elif temp_pac[20] == "79":  # VIF is not transmitted
             i1 = 30
             i2 = 34
             i3 = 35
         new_pac += calculate_flow_packet(temp_pac, i1, i2, i3)
-    
-    elif man_id_1 == "2d" and man_id_2 == "2c" and packet_type == "18": # Kamstrup PressureSensor
-        if temp_pac[20] == "78": # VIF is transmitted
+
+    elif (
+        man_id_1 == "2d" and man_id_2 == "2c" and packet_type == "18"
+    ):  # Kamstrup PressureSensor
+        if temp_pac[20] == "78":  # VIF is transmitted
             # last_min_pressure_VIF
             sensor_info_dict[device_name][1] = temp_pac[22]
             # last_max_pressure_VIF
@@ -176,19 +206,23 @@ def format_packet(pac):
             i1 = 24
             i2 = 28
             i3 = 32
-        elif temp_pac[20] == "79": # VIF is not transmitted
+        elif temp_pac[20] == "79":  # VIF is not transmitted
             i1 = 26
             i2 = 28
             i3 = 30
         new_pac += calculate_pressure_packet(temp_pac, i1, i2, i3)
 
-    elif man_id_1 == "9a" and man_id_2 == "ce" and packet_type == "16": # Simulated flowIQ
+    elif (
+        man_id_1 == "9a" and man_id_2 == "ce" and packet_type == "16"
+    ):  # Simulated flowIQ
         i1 = 31
         i2 = 35
         i3 = 36
         new_pac += calculate_flow_packet(temp_pac, i1, i2, i3)
 
-    elif man_id_1 == "9a" and man_id_2 == "ce" and packet_type == "18": # Simulated PressureSensor
+    elif (
+        man_id_1 == "9a" and man_id_2 == "ce" and packet_type == "18"
+    ):  # Simulated PressureSensor
         i1 = 27
         i2 = 29
         i3 = 31
@@ -203,6 +237,7 @@ def format_packet(pac):
 
     return new_pac
 
+
 def print_packet(packet):
     """
     Print a data packet
@@ -212,6 +247,7 @@ def print_packet(packet):
         print(i, end="\t")
     print(" ")
 
+
 def save_packet(save_loc, packet):
     """
     Save a data packet in a csv format
@@ -220,21 +256,28 @@ def save_packet(save_loc, packet):
         writer = csv.writer(f, delimiter=",")
         writer.writerow([packet])
 
+
 def main():
     source_location = "../../data/2021/05-mai/"
     flow_meter = "688268302c2d"
     pressure_meter = "770004242c2d"
     date = "2021-05-22"
 
-    flow_file = source_location + flow_meter + "-" + date + '.csv'
-    pressure_file = source_location + pressure_meter + "-" + date + '.csv'
+    flow_file = source_location + flow_meter + "-" + date + ".csv"
+    pressure_file = source_location + pressure_meter + "-" + date + ".csv"
 
-    formatted_save_loc = source_location + sensor_info_dict[flow_meter][0] + "_" + date + "-formatted.csv"
+    formatted_save_loc = (
+        source_location
+        + sensor_info_dict[flow_meter][0]
+        + "_"
+        + date
+        + "-formatted.csv"
+    )
 
     with open(flow_file) as csv_flow_file:
         csv_reader = csv.reader(csv_flow_file)
         for row in csv_reader:
-            #print(row)
+            # print(row)
             formatted_packet = format_packet(row[0])
             print_packet(flow_meter + ";" + formatted_packet)
             save_packet(formatted_save_loc, formatted_packet)
@@ -242,7 +285,7 @@ def main():
     with open(pressure_file) as csv_pressure_file:
         csv_reader = csv.reader(csv_pressure_file)
         for row in csv_reader:
-            #print(row)
+            # print(row)
             formatted_packet = format_packet(row[0])
             print_packet(pressure_meter + ";" + formatted_packet)
             save_packet(formatted_save_loc, formatted_packet)
